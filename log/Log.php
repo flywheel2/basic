@@ -20,7 +20,8 @@
 
 namespace ickx\fw2\basic\log;
 
-use ickx\fw2\core\net\http\Request;
+use ickx\fw2\core\environment\Environment;
+use ickx\fw2\core\cli\Cli;
 
 /**
  * 詳細なロギングを提供します。
@@ -43,7 +44,8 @@ class Log {
 		$exclusion_uri_list = isset($options['exclusion_uri']) ? (array) $options['exclusion_uri'] : [];
 
 		//取得対象外URIの場合、処理終了
-		if (in_array($_SERVER['REQUEST_URI'], $exclusion_uri_list)) {
+		$request_uri = Environment::IsCli() ? Cli::GetFirstParameter() : $_SERVER['REQUEST_URI'];
+		if (in_array($request_uri, $exclusion_uri_list, true)) {
 			return null;
 		}
 
@@ -51,7 +53,8 @@ class Log {
 		$exclusion_remote_addr_list = isset($options['exclusion_remote_addr']) ? (array) $options['exclusion_remote_addr'] : [];
 
 		//取得対象外URIの場合、処理終了
-		if (in_array($_SERVER['REMOTE_ADDR'], $exclusion_remote_addr_list)) {
+		$remote_addr = Environment::IsCli() ? null : $_SERVER['REMOTE_ADDR'];
+		if (in_array($remote_addr, $exclusion_remote_addr_list, true)) {
 			return null;
 		}
 
@@ -114,24 +117,24 @@ class Log {
 		$auth_info = $use_basic_auth ? sprintf('%s:%s@', $basic_auth_user, $basic_auth_password) : null;
 
 		//host name
-		$server_name_target = $_SERVER['SERVER_NAME'];
+		$server_name_target = $_SERVER['SERVER_NAME'] ?? null;
 		if (isset($_SERVER['HTTP_HOST'])) {
 			$server_name_target = $_SERVER['SERVER_NAME'] !== $_SERVER['HTTP_HOST'] ? 'HTTP_HOST' : 'SERVER_NAME';
 		}
-		$host_name = $_SERVER[$server_name_target];
+		$host_name = $_SERVER[$server_name_target] ?? null;
 
 		//server port
-		$server_port = $_SERVER['SERVER_PORT'];
+		$server_port = $_SERVER['SERVER_PORT'] ?? null;
 		$server_port = $server_port === '80' || ($https_flag && $server_port === '443') ? null : $server_port;
 
 		//request url
-		$request_url = $_SERVER['REQUEST_URI'];
+		$request_uri = Environment::IsCli() ? Cli::GetFirstParameter() : $_SERVER['REQUEST_URI'];
 
 		//url
-		$url = sprintf('%s://%s%s%s%s', $protocol, $auth_info, $host_name, $server_port, $request_url);
+		$url = sprintf('%s://%s%s%s%s', $protocol, $auth_info, $host_name, $server_port, $request_uri);
 
 		//header
-		$request_header_list = Request::GetHeaders();
+		$request_header_list = Environment::IsCli() ? [] : Request::GetHeaders();
 		$header_list = [];
 		foreach ($request_header_list as $name => $value) {
 			$header_list[$name] = sprintf("-H %s", escapeshellarg(sprintf('%s: %s', $name, $value)));
@@ -139,7 +142,7 @@ class Log {
 
 		$data = '';
 
-		if (strtoupper($_SERVER['REQUEST_METHOD']) === 'POST') {
+		if (strtoupper($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 			if (isset($request_header_list['Content-Type']) && substr($request_header_list['Content-Type'], 0, 20) === 'multipart/form-data;' && preg_match("@^multipart/form-data; boundary=\-+([^\-]+)$@", $request_header_list['Content-Type'], $ret)) {
 				unset($header_list['Content-Type']);
 
@@ -174,8 +177,10 @@ class Log {
 		$json_log_name = isset($options['json_log_name']) ? $options['json_log_name'] : 'json.log';
 		$log_file_path = implode(DIRECTORY_SEPARATOR, [$json_log_dir, $json_log_name]);
 
+		$request_uri = Environment::IsCli() ? Cli::GetFirstParameter() : $_SERVER['REQUEST_URI'];
+
 		$json_data = [
-			'REQUEST_URI'	=> $_SERVER['REQUEST_URI'],
+			'REQUEST_URI'	=> $request_uri,
 			'GET'			=> $_GET,
 			'POST'			=> $_POST,
 			'COOKIE'		=> $_COOKIE,
